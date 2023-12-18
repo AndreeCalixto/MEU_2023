@@ -1,0 +1,405 @@
+---
+title: "Trabajo Final- Instrumentos de Análisis Urbanos II"
+author: "Hugo Calixto"
+date: "2023-12-17"
+output: html_document
+---
+
+# Introducción
+
+En su documento de investigación, Feres y Mancero (2001), consideran que el método directo más conocido y utilizado en América Latina para caracterizar la pobreza es el enfoque de Necesidades Básicas Insatisfechas (NBI). En esa misma línea, el Instituto Nacional de Estadísticas y Censos de Argentina (INDEC) recopila la información de la población y los hogares con NBI, obtenida de los censos.
+
+
+El INDEC considera hogares con NBI a aquellos que posean al menos una de las siguientes carencias (INDEC, 2012):
+
+
+**NBI 1 Viviendas** : es el tipo de vivienda que habitan los hogares que residen en habitaciones de inquilanato, hotel o pensión, viviendas no destinadas a fines habitacionales, viviendas precarias y otro tipo de vivienda.
+
+
+**NBI 2 Condiciones Sanitarias** : comprenden hogares que no cuentan con retrete.
+
+
+**NBI 3 Hacinamiento ** : es la relación entre la cantidad total de miembros del hogar y la cantidad de habitaciones de uso exclusivo del hogar. Asimismo, se considera hacinamiento crítico cuando en el hogar hay más de tres personas por cuarto.
+
+
+**NBI 4 Asistencia escolar**: hogares que tienen al menos un niño en edad escolar (6 a 12 años) que no asiste a la escuela.
+
+
+**NBI 5 Capacidad de subsistencia** : incluye a los hogares que tienen cuatro o más personas por miembro ocupado y que tienen un jefe que no ha completado el tercer grado de escolaridad primaria.
+
+
+Dado este marco teórico, el presente trabajo pretende realizar un análisis descriptivo de la caracterización de los hogares con NBI de la Ciudad Autónoma de Buenos Aires. Específicamente, se identificará las principales comunas de CABA con mayor porcentaje de NBI y se cruzará con informaciòn proporcionada por el grado de hacinamiento y la ubicación de las conjuntos habitacionales, donde se esperaría encontrar que estas edificaciones se concentren en las comunas donde haya un mayor nivel de hogares con NBI.
+
+
+# Análisis de la información
+
+## 1. Población por comuna en CABA
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+
+library(sf)
+
+library(dplyr)
+
+library(patchwork)
+
+library(readxl)
+
+library(openxlsx)
+
+library(sp)
+
+library(ggplot2)
+```
+
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+#Importando la base de datos respecto a información censal por radio
+
+url_radio <- "https://cdn.buenosaires.gob.ar/datosabiertos/datasets/direccion-general-de-estadisticas-y-censos/informacion-censal-por-radio/caba_radios_censales.geojson"
+
+data_radio <- st_read(url_radio, stringsAsFactors = FALSE)
+
+```
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+#Convertimos a formato integer para obtener estadísticos de las principales variables
+data_radio$ID <-as.integer(data_radio$ID)
+data_radio$COMUNA <-as.integer(data_radio$COMUNA)
+data_radio$FRACCION <-as.integer(data_radio$FRACCION)
+data_radio$RADIO <-as.integer(data_radio$RADIO)
+data_radio$TOTAL_POB <-as.integer(data_radio$TOTAL_POB)
+data_radio$T_VARON <-as.integer(data_radio$T_VARON)
+data_radio$T_MUJER <-as.integer(data_radio$T_MUJER)
+data_radio$T_VIVIENDA <-as.integer(data_radio$T_VIVIENDA)
+data_radio$V_PARTICUL <-as.integer(data_radio$V_PARTICUL)
+data_radio$V_COLECTIV <-as.integer(data_radio$V_COLECTIV)
+data_radio$T_HOGAR <-as.integer(data_radio$T_HOGAR)
+data_radio$H_CON_NBI <-as.integer(data_radio$H_CON_NBI)
+data_radio$H_SIN_NBI <-as.integer(data_radio$H_SIN_NBI)
+
+str(data_radio)
+```
+
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+data_comuna <- data_radio %>% group_by(COMUNA) %>%
+  summarise(total_pobl= sum(TOTAL_POB),
+            total_homb=sum(T_VARON),
+            total_muj=sum(T_MUJER),
+            total_viv= sum(T_VIVIENDA),
+            total_hog= sum(T_HOGAR),
+            total_nbi= sum(H_CON_NBI),
+            total_snbi= sum(H_SIN_NBI))
+
+data_comuna <- data_comuna %>% 
+  mutate(data_comuna, COMUNA1= as.factor(COMUNA))
+
+str(data_comuna)
+
+data_comuna <- data_comuna %>% 
+  mutate(total_pobl_miles=(total_pobl/1000))
+
+data_comuna$total_pobl_miles<-round(data_comuna$total_pobl_miles, 0)
+
+summary(data_comuna$total_nbi)
+```
+
+
+
+
+El gráfico 1 nos muestra la población de CABA por comuna, ordenada de manera descendente. Es decir, de acuerdo al Censo Nacional de Población, Hogares y Viviendas 2010, la comuna 13 (conformada por los barrios de Núñez, Belgrano y Colegiales) fue la que mayor población alcanzó con un total de 231 mil habitantes. Le siguieron, muy de cerca, las comunas 14(barrio de Palermo) y 7 (integrada por los barrios de Flores y Parque Chacabuco) con 226 mil y 221 mil habitantes respectivamente. En contraste, las comunas con menor cantidad de población fueron la comuna 2 (158 mil personas), comuna 9 (162 mil) y comuna 10 (166 mil), entre los màs relevantes. Asimismo, la poblaciòn total del CABA en el 2010 fue de 2 millones 281 mil personas.
+
+
+```{r, echo= FALSE, warning=FALSE, message=FALSE }
+graf1 <-ggplot(data_comuna, aes(x = reorder(COMUNA1, total_pobl_miles), y = total_pobl_miles)) +
+  geom_bar(stat = "identity", position = 'dodge', fill="green4") +
+  geom_text(aes(label = total_pobl_miles), vjust = 1.0, colour = "black")+
+  xlab("Comuna") +
+  ylab("Población") +
+  ggtitle("                                              Gráfico 1
+          Población por Comuna en CABA, 2010 (en miles)")+
+  coord_flip()+
+  labs(caption = "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010")
+
+graf1
+```
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+# Se calcula la proporción de hombres por comuna
+
+data_comuna <- data_comuna %>%
+  mutate(part_pobl_homb=(total_homb/total_pobl)*100)
+
+data_comuna$part_pobl_homb<-round(data_comuna$part_pobl_homb, 1)
+
+
+# Se calcula la proporción de mujeres por comuna
+data_comuna <- data_comuna %>%
+  mutate(part_pobl_muj=(total_muj/total_pobl)*100)
+
+data_comuna$part_pobl_muj<-round(data_comuna$part_pobl_muj, 1)
+
+```
+
+
+
+```{r}
+graf2 <-ggplot(data_comuna, aes(x = reorder(COMUNA1, part_pobl_homb), y = part_pobl_homb)) +
+  geom_bar(stat = "identity", position = 'dodge', fill="skyblue") +
+  geom_text(aes(label = part_pobl_homb), vjust = 1.0, colour = "black")+
+  xlab("Comuna") +
+  ylab("% Part. Población Hombre") +
+  ggtitle("                                             Gráfico 2
+          Participación de Población de Hombres por Comunas en CABA, 2010")+
+  coord_flip()+
+  labs(caption = "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010")
+
+```
+
+
+```{r}
+graf3<-ggplot(data_comuna, aes(x = reorder(COMUNA1, part_pobl_muj), y = part_pobl_muj)) +
+  geom_bar(stat = "identity", position = 'dodge', fill="yellow4") +
+  geom_text(aes(label = part_pobl_muj), vjust = 1.0, colour = "black")+
+  xlab("Comuna") +
+  ylab("% Part.Población Mujer") +
+  ggtitle("                                                  Gráfico 3
+          Participación de Población de Mujeres por Comunas en CABA, 2010")+
+  coord_flip() +
+  labs(caption = "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010")
+
+```
+
+
+Continuando con el análisis de la población por comuna. Es preciso conocer la participaciòn porcentual de hombres y mujeres en cada comuna. Los gráficos 2 y 3 son complementarios, ya que el complemento de uno se muestra en el otro.
+Se observa que en todas las comunas predomina la participación de mujeres respecto al de hombres. Por ejemplo, en la comuna 2 es la que posee la mayor proporciòn de mujeres entre comunas (56,9%), mientras que en la comuna 8, es la que posee menor proporciòn con un 52,2% de participación.
+
+
+```{r, fig.width=14, fig.height=8}
+graf2 + graf3
+```
+
+El gráfico 4, resume todo el análisis previo en un mapa coroplético, como se muestra a continuación
+
+
+```{r}
+graf4 <-ggplot(data_comuna)+
+  geom_sf(aes(fill=total_pobl_miles))+
+  geom_sf_label(aes(label=COMUNA))+
+  labs(title = "                         Gráfico 4
+       Población por Comuna en CABA, 2010 (en miles)",
+       fill = "Pobl_Comuna",
+       caption= "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010") +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1) +
+  theme_minimal()+
+  scale_fill_distiller(palette = "Spectral") +
+  theme_light()
+
+graf4
+```
+
+
+## 2. Proporción de hogares por comuna con NBI
+
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+data_comuna <- data_comuna %>%
+  mutate(part_nbi_hog=(total_nbi/total_hog)*100)
+
+data_comuna$part_nbi_hog<-round(data_comuna$part_nbi_hog, 1)
+```
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+graf5 <- ggplot(data_comuna)+
+  geom_sf(aes(fill=part_nbi_hog))+
+  geom_sf_label(aes(label=COMUNA))+
+  labs(title = "                                Gráfico 5
+       Porcentaje de Hogares con NBI por Comuna en CABA, 2010",
+       fill = "Part.% Hog_NBI",
+       caption= "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010") +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1) +
+  theme_minimal()
+scale_fill_distiller(palette = "Spectral") 
+
+```
+
+
+El gráfico 5 nos muestra una de las variables màs importantes de este trabajo, la proporción de hogares por comuna de CABA con NBI. El mapa nos informa de aquellas comunas que poseen un color rojo más intenso serán las que tengan un mayor porcentaje de hogares con NBI, tal como sucede en las Comunas 1, 3, 4 y 8 que se ubican en la parte sur este de CABA. Por el contrario, las comunas con un menor porcentaje de NBI, son 12, 13, 11 y 2, localizadas al norte de la ciudad.
+
+
+```{r}
+graf5
+```
+
+
+## 3. Hacinamiento en los hogares
+
+```{r, include=FALSE}
+
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+#Importando la base de datos de hacinamiento de hogares por vivienda de la Ciudad Autónoma de Buenos Aires
+
+url_hacinam <-"https://cdn.buenosaires.gob.ar/datosabiertos/datasets/vivienda-durable-calidad-constructiva/hacinamiento.csv"
+
+hacinam<-read_csv(url_hacinam)
+
+#Generamos un subconjunto de datos correspondientes solo al 2010
+
+hacinam <-subset(hacinam, comunas!="Total")
+
+hacinam <- hacinam %>% 
+  filter(año=="2010")
+
+colnames(hacinam) <- c('COMUNA', 'año', 'sin_hac', 'hac_nocr', 'hac_cr')
+
+names(hacinam)
+```
+
+```{r, include=FALSE}
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+
+graf6 <-ggplot(hacinam, aes(x = reorder(COMUNA, hac_nocr), y = hac_nocr)) +
+  geom_bar(stat = "identity", position = 'dodge', fill="darksalmon") +
+  geom_text(aes(label = hac_nocr), vjust = 1.0, colour = "black")+
+  xlab("Comuna") +
+  ylab("Hacinamiento no crítico") +
+  ggtitle("                                                       Gráfico 6
+          Hogares por Comunas en CABA bajo Hacinamiento no crítico, 2010 (porcentaje)")+
+  coord_flip() +
+  labs(caption = "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010")
+```
+
+
+Según el informe del IVC Buenos Aires (2013), "las condiciones de hacinamiento de personas por cuarto al cociente entre la cantidad total de personas del hogar y la cantidad total de habitaciones o piezas de que se dispone. Se considera un hogar en “situación de hacinamiento no crítico” si el cociente da dos o tres personas por cuarto de la vivienda, mientras que están considerados en “situación de hacinamiento crítico” aquellos hogares en los cuales hay más de tres personas por cuarto de la vivienda"
+
+En el gráfico 6 se observa que la comuna 4 es la que posee el mayor porcentaje de hacinamiento no crìtico en el 2010 (17,5%), seguido por la comuna 8 (17,4%), comuna 1 (16,2%), comuna 3 (13,6%); entre las comunas que superan el 10% de hacinamiento no crítico.
+
+
+```{r, fig.width=10, fig.height=6}
+graf6
+```
+
+En el gráfico 7 se puede apreciar de mejor manera el análisis anterior. Que es muy similar al gràfico 5, donde ambas muestran que las comunas con mayor porcentaje de NBI tambièn son las que tienen un mayor hacinamiento no crítico.
+
+
+```{r, include=FALSE}
+hacinam$COMUNA <-as.integer(hacinam$COMUNA)
+
+data_comuna_hacinam <-left_join(data_comuna, hacinam, by="COMUNA")
+
+
+graf7 <- ggplot(data_comuna_hacinam)+
+  geom_sf(aes(fill=hac_nocr))+
+  geom_sf_label(aes(label=COMUNA))+
+  labs(title = "                                                Gráfico 7
+       Porcentaje de Hogares con Hacinamiento no crítico según Comuna, 2010",
+       fill = "% Hog. con hacinamiento no crítico",
+       caption= "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010") +
+  scale_fill_distiller(palette = "YlOrRd", direction = 1) +
+  theme_minimal()
+scale_fill_distiller(palette = "Spectral")
+
+
+```
+
+```{r}
+graf7
+```
+
+## 4. Conjuntos urbanos en CABA
+
+```{r, include=FALSE}
+
+options(warn = -1)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(echo = FALSE)
+
+#Importamos los datos correspondientes a la ubicaciòn de los conjuntos urbanos en CABA
+url_conj_urb <-"https://cdn.buenosaires.gob.ar/datosabiertos/datasets/instituto-de-vivienda/conjuntos-urbanos-cooperativas-ivc/conjuntos-urbanos-ivc.geojson"
+
+data_conj_urb <- st_read(url_conj_urb)
+
+str(data_conj_urb)
+
+str(data_comuna_hacinam)
+
+data_comuna_hacinam$COMUNA1<-as.character(data_comuna_hacinam$COMUNA1)
+```
+
+
+Con la informaciòn de la ubicaciòn de los conjuntos urbanos, se pretende conocer donde están màs concentrados y si es que se encuentran próximos a las comunas con mayor porcentaje de hogares con NBI o con hacinamiento no crìtico.
+
+El gràfico 8, nos da una primera respuesta. Se puede apreciar el mapa coroplètico donde se muestra el porcentaje con hacinamiento no crítico antes visto, sin embargo, se observar tambièn la ubicaciòn de los conjuntos urbanos (color verde), que en mayor proporciòn están concentrados en la parte sur de la ciudad, esto es en la comuna 8,4 y 7.
+
+
+```{r}
+graf8 <-ggplot() + 
+  geom_sf(data = data_comuna_hacinam, aes(fill=hac_nocr), color="white") + 
+   labs(title = "                                                  Gráfico 8
+        Porcentaje de Hogares con Hacinamiento no crítico según Comuna y conjuntos urbanos, 2010",
+       fill = "% Hog. con hacinamiento no crítico",
+       caption= "Fuente: Censo Nacional de Población, hogares y viviendas (INDEC) 2010")+
+  scale_fill_distiller(palette = "YlOrRd", direction = 1)+
+  geom_sf(data = data_conj_urb, color = "darkcyan") +
+  theme_minimal()
+
+```
+
+```{r, fig.width=10, fig.height=6}
+graf8
+```
+
+
+# Lìmites del trabajo y conclusión
+
+El presente informe puede enriquecerse mucho más a través de la incorporaciòn de otros indicadores vinculados a las NBI, como el número de instituciones educativas por comuna y conocer donde se localizan para colegir si pretenden cerrar las brechas de inasistencia de a la escuela de los niños.
+
+De otro lado, entre las conclusiones destacar que se encontró una coherencia entre los datos de las comunas con mayor porcentaje de NBI y aquellas con mayor hacinamiento no crìtico, esto es asì, porque justamente, esta variable forma parte de los cinco tipos de NBI considerados por el INDEC.
+
+Ademàs se observò que si bien cierto los conjuntos urbanos estàn en varias comunas de CABA, la mayorìa se concentra en la zona sur de la Ciudad, justamente donde hay un mayor porcentaje de hogares con hacinamiento no crítico. De esta evidencia, se puede interpretar que históricamente, estas comunas han tenido este problema y que la construcción de estos conjuntos urbanos no son suficientes para disminuir el déficit que se observa.
+
+
+**Referencias**
+
+Feres J. y Mancero X. (2001) El Método de las Necesidades Básicas Insatisfechas (NBI) y sus aplicaciones en América Latina. Recuperado el 17 de diciembre de 2023 de https://repositorio.cepal.org/server/api/core/bitstreams/da8d48c5-0807-4bd1-b330-c0a9e1566e02/content.
+
+
+Instituto Nacional de Estadìstica e Informática (2012) Censo Nacional de Población, Hogares y Viviendas 2010. Resultados definitivos Serie B Nª2 Tomo 2. Recuperado el 17 de diciembre de 2023 de https://www.indec.gob.ar/ftp/cuadros/poblacion/censo2010_tomo2.pdf
+
+
+Instituto de la Vivienda de la Ciudad (2013) Diagnóstico Déficit Habitacional por Comunas en CABA. Recuperado el 17 de diciembre de 2023 de https://cdn.buenosaires.gob.ar/datosabiertos/datasets/instituto-de-vivienda/informes-coyuntura-habitacional/nro_2__diagnostico_deficit_habitacional_por_comunas_en_caba_agosto_2013.pdf
+
+
+
+
